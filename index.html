@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaussian Blur with JavaScript</title>
+</head>
+<body>
+    <div>
+      <h2>Gaussian Blur with JavaScript</h2>
+      <label>
+        Select an image file:
+        <input type="file" id="fileInput" accept="image/*">
+      </label>
+    </div>  
+    <canvas id="canvasOutput"></canvas>
+    <script>
+      let canvas = document.getElementById('canvasOutput');
+        document.getElementById('fileInput').onchange = function (evt) {
+            let file = evt.target.files[0];
+            let reader = new FileReader();
+            reader.onload = function (e) {
+                let img = new Image();
+                img.onload = function () {
+                    let ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0, img.width, img.height);
+                    applyGaussianBlurWithIntegralImage(ctx, 3);
+                    img.onload = null;
+                    img.src = canvas.toDataURL();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
+        function applyGaussianBlurWithIntegralImage(ctx, radius) {
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          const width = canvas.width;
+          const height = canvas.height;
+
+          // compute integral image for each channel
+          const integralR = computeIntegralImage(data, width, height, 0); // red
+          const integralG = computeIntegralImage(data, width, height, 1); // green
+          const integralB = computeIntegralImage(data, width, height, 2); // blue
+
+          // apply gaussian blur
+          for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                  const blurredPixel = getBlurredPixel(integralR, integralG, integralB, x, y, radius, width, height);
+                  const index = (y * width + x) * 4;
+                  data[index] = blurredPixel.r;     // red
+                  data[index + 1] = blurredPixel.g; // green
+                  data[index + 2] = blurredPixel.b; // blue
+                  data[index + 3] = 255;            // Alpha
+              }
+          }
+
+          ctx.putImageData(imageData, 0, 0);
+      }
+
+      function computeIntegralImage(data, width, height, channelOffset) {
+          const integral = new Array(width * height).fill(0);
+
+          for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                  const index = y * width + x;
+                  const pixelValue = data[(y * width + x) * 4 + channelOffset];
+                  const prevX = x > 0 ? integral[y * width + (x - 1)] : 0;
+                  const prevY = y > 0 ? integral[(y - 1) * width + x] : 0;
+                  const prevXY = x > 0 && y > 0 ? integral[(y - 1) * width + (x - 1)] : 0;
+
+                  integral[index] = pixelValue + prevX + prevY - prevXY;
+              }
+          }
+
+          return integral;
+      }
+
+      function getBlurredPixel(integralR, integralG, integralB, x, y, radius, width, height) {
+          const x1 = Math.max(x - radius, 0);
+          const y1 = Math.max(y - radius, 0);
+          const x2 = Math.min(x + radius, width - 1);
+          const y2 = Math.min(y + radius, height - 1);
+
+          const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+
+          const sumR = getAreaSum(integralR, x1, y1, x2, y2, width);
+          const sumG = getAreaSum(integralG, x1, y1, x2, y2, width);
+          const sumB = getAreaSum(integralB, x1, y1, x2, y2, width);
+
+          return {
+              r: sumR / area,
+              g: sumG / area,
+              b: sumB / area,
+          };
+      }
+
+      function getAreaSum(integral, x1, y1, x2, y2, width) {
+          const a = x1 > 0 && y1 > 0 ? integral[(y1 - 1) * width + (x1 - 1)] : 0;
+          const b = y1 > 0 ? integral[(y1 - 1) * width + x2] : 0;
+          const c = x1 > 0 ? integral[y2 * width + (x1 - 1)] : 0;
+          const d = integral[y2 * width + x2];
+
+          return d - b - c + a;
+      }
+    </script>
+</body>
+</html>
